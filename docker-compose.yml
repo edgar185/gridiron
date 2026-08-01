@@ -1,0 +1,36 @@
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: gridiron
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gridiron_dev}
+      POSTGRES_DB: gridironiq
+    ports: ["5432:5432"]
+    volumes:
+      - gridironiq_pgdata:/var/lib/postgresql/data
+      - ./schema/fantasy_kpi_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      - ./schema/stadiums_seed.sql:/docker-entrypoint-initdb.d/02_stadiums.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gridiron"]
+      interval: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    ports: ["8000:8000"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://gridiron:${POSTGRES_PASSWORD:-gridiron_dev}@db:5432/gridironiq
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    ports: ["5173:5173"]
+    depends_on: [backend]
+
+volumes:
+  gridironiq_pgdata:
