@@ -212,11 +212,21 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--season", type=int, required=True)
     parser.add_argument("--week", type=int, required=True)
+    parser.add_argument("--skip-props", action="store_true",
+                         help="Skip player props (5 markets x ~16 events/week is the "
+                              "expensive part of the free 500-credit/mo quota). Nothing "
+                              "downstream reads player_props yet -- only vegas_lines "
+                              "(game lines) feeds the app -- so scheduled/frequent runs "
+                              "should pass this.")
     args = parser.parse_args()
 
     with psycopg.connect(DB_URL) as conn:
         games = fetch_game_lines()
         store_game_lines(conn, games)
+
+        if args.skip_props:
+            print(f"Done — game lines only (--skip-props) for season {args.season} week {args.week}")
+            raise SystemExit(0)
 
         # fetch_events() returns the WHOLE season's slate (272 games), not
         # just the requested week -- player props are a per-event API call,
