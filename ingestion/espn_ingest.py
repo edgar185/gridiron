@@ -152,6 +152,19 @@ def ingest_league(conn, league, season):
 
 
 def ingest_teams_and_rosters(conn, league):
+    # A pre-draft league (offseason, before this season's draft has run)
+    # reports every team's roster as empty -- that's real, but it's not a
+    # signal that everyone got cut. Guard against the full-snapshot diff
+    # below wiping out the last real drafted-roster snapshot (e.g. still
+    # showing last season's team while this season is pre-draft): only
+    # treat the fetch as authoritative if ESPN actually returned players
+    # for at least one team.
+    total_rostered = sum(len(team.roster) for team in league.teams)
+    if total_rostered == 0:
+        print(f"Rosters: league {league.league_id} has 0 players rostered across all teams "
+              f"(pre-draft?) -- leaving the existing roster_slots snapshot untouched")
+        return
+
     with conn.cursor() as cur:
         # Full-snapshot diff: close out everything active for this league, then
         # re-open what's actually still rostered below.

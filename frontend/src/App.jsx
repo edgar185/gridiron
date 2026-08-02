@@ -43,6 +43,13 @@ const COMPARE_IDS = ["00-0036973", "00-0038994"]; // Travis Etienne (your FLEX),
 // waivers/draft-tiers to this league's actual roster settings and free
 // agent pool instead of a generic assumption.
 const LEAGUE_ID = 1859403384;
+// ESPN team names are season-scoped, not a stable ID -- this league's team
+// was "Edgar's Crown Jewel" for 2025 (the season this app's SEASON constant
+// below actually displays) and got renamed to "Edgar's Dynasty" for 2026.
+// Keep this matching whichever season SEASON points at; bump it alongside
+// SEASON once that's flipped to 2026 (post-draft, once ESPN reports a real
+// non-empty 2026 roster -- see the guard in espn_ingest.py's
+// ingest_teams_and_rosters()).
 const TEAM_NAME = "Crown Jewel";
 
 function recColor(rec) {
@@ -211,7 +218,10 @@ function DashboardScreen() {
       <div className="rounded-lg border p-3" style={{ backgroundColor: T.panel, borderColor: T.line }}>
         <span className="text-[10px] uppercase tracking-widest font-semibold" style={{ color: T.muted }}>Your Starting Lineup</span>
         {roster.error && <p className="text-xs mt-2" style={{ color: T.red }}>{roster.error}</p>}
-        {starters.length === 0 && !roster.error && <p className="text-xs mt-2" style={{ color: T.muted }}>Loading...</p>}
+        {roster.loading && <p className="text-xs mt-2" style={{ color: T.muted }}>Loading...</p>}
+        {!roster.loading && !roster.error && starters.length === 0 && (
+          <p className="text-xs mt-2" style={{ color: T.muted }}>No roster synced yet — nothing drafted for this league.</p>
+        )}
         <div className="mt-2 flex flex-col gap-1.5">
           {starters.map((p) => (
             <div key={p.playerId} className="flex items-center gap-1.5">
