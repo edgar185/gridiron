@@ -40,7 +40,7 @@ python3 -m venv ingest_venv && source ingest_venv/bin/activate
 pip install -r ingestion/requirements.txt
 export $(cat .env | xargs)
 python ingestion/nflverse_ingest.py --season 2026 --week 9
-python ingestion/weather_ingest.py --week 9
+python ingestion/weather_ingest.py --season 2026 --week 9
 python ingestion/odds_ingest.py --season 2026 --week 9
 ```
 

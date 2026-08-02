@@ -1,3 +1,4 @@
 nfl_data_py
 psycopg[binary]
 requests
+espn_api

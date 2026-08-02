@@ -149,7 +149,12 @@ def store_game_lines(conn, games):
 
             spreads = next((m for bm in g.get("bookmakers", []) for m in bm["markets"] if m["key"] == "spreads"), None)
             totals = next((m for bm in g.get("bookmakers", []) for m in bm["markets"] if m["key"] == "totals"), None)
-            spread_val = spreads["outcomes"][0]["point"] if spreads else None
+            # outcomes[0] is NOT reliably the home team -- The Odds API orders
+            # spread outcomes arbitrarily (confirmed live: a Seahawks-home game
+            # came back with the Patriots listed first). Match by name instead;
+            # totals market is order-safe since both outcomes share one point.
+            home_outcome = next((o for o in spreads["outcomes"] if o["name"] == g["home_team"]), None) if spreads else None
+            spread_val = home_outcome["point"] if home_outcome else None
             total_val = totals["outcomes"][0]["point"] if totals else None
 
             cur.execute(
@@ -213,12 +218,25 @@ if __name__ == "__main__":
         games = fetch_game_lines()
         store_game_lines(conn, games)
 
+        # fetch_events() returns the WHOLE season's slate (272 games), not
+        # just the requested week -- player props are a per-event API call,
+        # so looping over all of them regardless of --week would burn the
+        # entire monthly credit quota in one run once props are actually
+        # posted for the full season. Filter to games in the requested
+        # season/week before spending a props call on each one.
         events = fetch_events()
+        processed = 0
         for ev in events:
             game_id = resolve_game_id(conn, ev["id"], ev["home_team"], ev["away_team"], ev["commence_time"])
             if not game_id:
                 continue
+            with conn.cursor(row_factory=dict_row) as cur:
+                cur.execute("SELECT season, week FROM games WHERE game_id = %s", (game_id,))
+                g = cur.fetchone()
+            if not g or g["season"] != args.season or g["week"] != args.week:
+                continue
             props = fetch_player_props(ev["id"])
             store_player_props(conn, ev["id"], game_id, props)
+            processed += 1
 
-        print(f"Done — processed {len(events)} events for week {args.week}")
+        print(f"Done — processed {processed} events for season {args.season} week {args.week} (of {len(events)} total events fetched)")

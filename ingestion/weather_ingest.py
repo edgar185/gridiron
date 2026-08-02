@@ -16,16 +16,19 @@ from psycopg.rows import dict_row
 DB_URL = os.environ["DATABASE_URL"]
 
 
-def get_outdoor_games(conn, week):
+def get_outdoor_games(conn, season, week):
+    # Filtering by week alone silently mixes seasons once `games` holds more
+    # than one (e.g. during a season transition) -- Open-Meteo's forecast
+    # endpoint 400s on a date that's not near-term, which is how this surfaced.
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
             """
             SELECT g.game_id, g.kickoff_ts, s.stadium_id
             FROM games g
             JOIN stadiums s ON s.stadium_id = g.stadium_id
-            WHERE g.week = %s AND s.is_dome = false
+            WHERE g.season = %s AND g.week = %s AND s.is_dome = false
             """,
-            (week,),
+            (season, week),
         )
         return cur.fetchall()
 
@@ -80,11 +83,12 @@ def store_weather(conn, game_id, forecast, kickoff_hour):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("--season", type=int, required=True)
     parser.add_argument("--week", type=int, required=True)
     args = parser.parse_args()
 
     with psycopg.connect(DB_URL) as conn:
-        games = get_outdoor_games(conn, args.week)
+        games = get_outdoor_games(conn, args.season, args.week)
         for g in games:
             coords = get_stadium_coords(conn, g["stadium_id"])
             if not coords:

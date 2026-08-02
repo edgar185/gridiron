@@ -8,6 +8,7 @@ Three scripts, three sources, mapped to the `refresh_*` stub functions in `fanta
 | `odds_ingest.py` | The Odds API | Free tier (500 credits/mo) → $30/mo for 20K | Vegas lines + player props |
 | `weather_ingest.py` | Open-Meteo | Free | Weather for outdoor games |
 | `stadiums_seed.sql` | manual (one-time) | Free | 32 stadium coordinates + dome status |
+| `espn_ingest.py` | ESPN Fantasy (unofficial, via `espn_api`) | Free | your league, teams, and current rosters |
 
 ## What changed from the first draft
 
@@ -45,7 +46,7 @@ python ingestion/nflverse_ingest.py --season 2026 --week 9
 psql "$DATABASE_URL" -f ingestion/stadiums_seed.sql
 
 # 3. Weather (free, depends on games + stadiums existing)
-python ingestion/weather_ingest.py --week 9
+python ingestion/weather_ingest.py --season 2026 --week 9
 
 # 4. Odds (costs credits — run last, after confirming 1–3 worked)
 python ingestion/odds_ingest.py --season 2026 --week 9
@@ -66,7 +67,31 @@ SELECT odds_event_id FROM odds_event_map; -- compare count against fetch_events(
 
 Low-confidence aliases (below ~0.90) are worth eyeballing before trusting that prop's data — a bad fuzzy match silently attaches one player's Vegas prop to a different player.
 
-## 4. Scheduling — folding into the existing `launchd` / pipeline setup
+## 4. ESPN Fantasy sync (your league/team, not general player data)
+
+`espn_ingest.py` pulls your actual ESPN league — settings, teams, current rosters — into `leagues` / `users` / `league_members` / `roster_slots`. It's a different kind of source than the other three: those feed the model's player-level KPIs league-wide; this feeds *your* league context (who's on your team, league scoring rules, roster requirements) for the recommendation layer to apply.
+
+ESPN has no public Fantasy API — `espn_api` talks to the same internal endpoints the ESPN website uses. Public leagues need nothing extra; private leagues (most of them) need two cookies from a logged-in browser session:
+
+```
+DevTools -> Application -> Cookies -> https://fantasy.espn.com
+  espn_s2  -> ESPN_S2
+  SWID     -> ESPN_SWID   (keep the braces, e.g. "{ABCD1234-...}")
+```
+
+Add those to `.env` alongside the other keys, then:
+
+```bash
+python ingestion/espn_ingest.py --season 2026 --league-id <your_league_id>
+```
+
+`<your_league_id>` is the numeric id in your league's ESPN URL (`.../league?leagueId=123456`). Rostered players are matched to `players.player_id` via the same fuzzy-name-match/`player_name_aliases` pattern `odds_ingest.py` uses for prop names (`source='espn'`) — expect kickers and defenses to come back unmatched, since `nflverse_ingest.py` only loads QB/RB/WR/TE into `players` today.
+
+Re-running the script is safe and idempotent: it diffs your current roster against what's stored (closes out anything no longer rostered, re-opens what's still there) rather than accumulating duplicate rows.
+
+**Cookie expiry:** if a run suddenly 401s, your `ESPN_S2`/`ESPN_SWID` have gone stale — re-copy them from a fresh logged-in browser session.
+
+## 5. Scheduling — folding into the existing `launchd` / pipeline setup
 
 Ingestion runs *before* the model retrain, so it slots in as new tasks at the front of the weekly DAG from `fantasy_pipeline_dag.py`:
 

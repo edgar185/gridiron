@@ -347,6 +347,20 @@ CREATE TABLE roster_slots (
 );
 CREATE INDEX idx_roster_slots_league_user ON roster_slots(league_id, user_id) WHERE dropped_ts IS NULL;
 
+-- Free agents in a specific league (not on any team's roster_slots there).
+-- ESPN's percent_owned/percent_started are computed across ALL ESPN
+-- leagues, not just this one -- the closest free real "how hot is this
+-- waiver pickup" signal available, populated by espn_ingest.py.
+CREATE TABLE league_free_agents (
+    league_id       BIGINT REFERENCES leagues(league_id),
+    player_id       VARCHAR(10) REFERENCES players(player_id),
+    percent_owned    NUMERIC(5,2),
+    percent_started   NUMERIC(5,2),
+    espn_injury_status VARCHAR(20),
+    captured_ts      TIMESTAMPTZ DEFAULT now(),
+    PRIMARY KEY (league_id, player_id)
+);
+
 -- ---------------------------------------------------------------------
 -- 10. LIVE DRAFT STATE
 --     Backs "picks until your turn", VONA, and the draft-room UI.
